@@ -29,6 +29,10 @@
 Figures/
 output/
 output_sensibilidad/
+*.png
+*.csv
+*.rds
+*.RData
 
 # Local archive of superseded scripts and legacy material
 archive/
