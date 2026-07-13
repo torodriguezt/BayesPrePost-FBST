@@ -4,6 +4,7 @@
 .RData
 .Ruserdata
 *.Rcheck/
+*.Rproj
 
 # Compiled C++ from Rcpp::sourceCpp
 *.o
@@ -11,7 +12,8 @@
 *.dll
 *_sourceCpp/
 
-# LaTeX intermediates
+# LaTeX (manuscript lives in Overleaf; only code is tracked here)
+*.tex
 *.aux
 *.log
 *.out
@@ -21,6 +23,15 @@
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+*.pdf
+
+# Generated outputs (fully reproducible via run_all.R)
+Figures/
+output/
+output_sensibilidad/
+
+# Local archive of superseded scripts and legacy material
+archive/
 
 # OS
 .DS_Store
@@ -30,10 +41,3 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
-
-# Outputs (regenerados al correr build_article_tables.R)
-# Comentar las siguientes líneas si querés versionar los outputs:
-# output/*.rds
-# output/*.log
-
-*.tex
