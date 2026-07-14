@@ -1,17 +1,8 @@
-# TVSFP application (paper Tables 2-4 and the McNemar table).
-# For each treatment condition and each of the three priors:
-#   1) calibrate the loss weight a* prior-based (simulate_evs_H / simulate_evs_A,
-#      using only n and the prior, never the observed counts);
-#   2) compute the observed e-value by 2D quadrature;
-#   3) obtain the adaptive cutoff k* posterior-based (simulate_evs_*_post with
-#      the observed counts) minimising a* alpha + beta, and decide ev <= k*;
-#   4) compute P(theta1 <= theta2 | X) from SIR posterior draws.
-# McNemar's test on the discordant pairs is reported as a frequentist benchmark.
-#
-# Data: tvsfp from the ALA package; groups defined by treatment condition
-# (school.based x tv.based), complete pre/post pairs only, THKS >= 3 as success.
-# Outputs: output/thks_fbst_{ni,inf,conf}.tex, output/thks_mcnemar.tex
-# Runtime: ~15-25 min (12 prior-based calibrations + 12 posterior runs).
+# TVSFP application: FBST tables under the three priors, with the weight a*
+# calibrated from the prior alone, plus McNemar's test as benchmark.
+# Data come from the ALA package (complete pre/post pairs, THKS >= 3).
+# Writes the LaTeX tables to output/.
+# Runtime: about 20 min.
 
 library(ALA)
 library(dplyr)
@@ -38,8 +29,7 @@ priors <- list(
        a0 = prior_CONF["a0"], a1 = prior_CONF["a1"], a2 = prior_CONF["a2"])
 )
 
-# Complete pre/post pairs for one treatment condition, with the 2x2 cell
-# counts needed by McNemar's test.
+# Complete pre/post pairs and 2x2 cell counts for one condition.
 extract_pairs <- function(d, label, sb, tv) {
   wide <- d %>%
     mutate(binTHKS = ifelse(THKS >= 3, 1, 0)) %>%
@@ -67,7 +57,7 @@ groups <- list(
   extract_pairs(tvsfp, "no CC, no TV", sb = "no",  tv = "no")
 )
 
-# Exact binomial version for few discordant pairs, chi-square otherwise.
+# Exact binomial for few discordant pairs, chi-square otherwise.
 mcnemar_pval <- function(n01, n10) {
   bc <- n01 + n10
   if (bc == 0L) return(1.0)
@@ -78,8 +68,7 @@ mcnemar_pval <- function(n01, n10) {
   }
 }
 
-# Prior-based a*: smallest weight with alpha_phi <= TARGET, interpolated
-# between the bracketing points of A_GRID. Depends only on n and the prior.
+# Smallest weight a with alpha_phi below the target, from the prior alone.
 calibrate_a <- function(n, a0, a1, a2, seed = SEED) {
   set.seed(seed)
   evH <- simulate_evs_H(n, n, a0, a1, a2, M_CAL, 401)
@@ -94,9 +83,8 @@ calibrate_a <- function(n, a0, a1, a2, seed = SEED) {
          y = c(A_GRID[j - 1], A_GRID[j]), xout = TARGET)$y
 }
 
-# FBST with calibrated weight for one group under one prior. The seed is
-# reset before the posterior-based pair so the k* here matches the error
-# curves drawn by R/07_application_figures.R.
+# FBST for one group under one prior. Seed reset keeps k* consistent with
+# the error curves of R/07_application_figures.R.
 run_fbst <- function(g, prior) {
   a0 <- prior$a0; a1 <- prior$a1; a2 <- prior$a2
 
@@ -157,7 +145,7 @@ print(tab, row.names = FALSE)
 
 dec_sym <- function(dec) ifelse(dec == "Reject", "Reject $H$", "Do not reject")
 
-# LaTeX table for one prior, including the calibrated a* column.
+# LaTeX table for one prior.
 write_fbst_table <- function(tab, key, prior_label, prior_spec,
                               label, filename) {
   ph  <- paste0("prob_H_", key)

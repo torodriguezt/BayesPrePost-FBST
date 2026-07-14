@@ -1,20 +1,8 @@
-# Prior-based calibration of the loss weight a* (Table "a_star_lookup" in the
-# paper). For each sample size n and prior specification, a* is the smallest
-# weight for which the Type-I Bayes risk alpha_phi = P(reject | H) is <= 0.05,
-# where the e-value distributions under H and under the alternative are
-# simulated from the prior alone (simulate_evs_H / simulate_evs_A): theta is
-# drawn from the prior restricted to H (resp. the full prior) and hypothetical
-# data X* ~ Bin(n, theta) are generated. No observed counts enter the
-# calibration, so a* can be fixed before seeing the data (no circularity).
-#
-# Three prior categories, each averaged over five prior means mu0
-# (alpha1 = alpha2 = mu0*N0, alpha0 = (1-mu0)*N0):
-#   Non-informative: N0 = 2,  mu0 in {0.1, 0.3, 0.5, 0.7, 0.9}
-#   Informative:     N0 = 50, mu0 in {0.30, 0.40, 0.45, 0.50, 0.60}
-#   Conflict:        N0 = 50, mu0 in {0.05, 0.10, 0.15, 0.20, 0.25}
-#
-# Output: output/a_star_lookup.csv (per-cell values and category means)
-# Runtime: ~30-60 min (150 calibrations, M = 3000 e-values each).
+# Calibrates the loss weight a* from the prior alone, for each sample size
+# and prior category, so that the Type I Bayes risk stays near 0.05.
+# No observed data enter the calibration, so the table can be reused in any
+# application. Writes output/a_star_lookup.csv.
+# Runtime: about 45 min.
 
 library(Rcpp)
 sourceCpp("src/BivBetaBinom.cpp")
@@ -37,8 +25,7 @@ categories <- list(
        mu0_grid = c(0.05, 0.10, 0.15, 0.20, 0.25))
 )
 
-# Smallest a on A_GRID with alpha_phi <= TARGET, refined by linear
-# interpolation between the two bracketing grid points.
+# Smallest weight a with alpha_phi below the target.
 calibrate_a <- function(n, a0, a1, a2, seed = SEED) {
   set.seed(seed)
   evH <- simulate_evs_H(n, n, a0, a1, a2, M_CAL, NGRID)
@@ -76,7 +63,7 @@ res <- do.call(rbind, rows)
 write.csv(res, "output/a_star_lookup.csv", row.names = FALSE)
 cat("\n-> output/a_star_lookup.csv\n\n")
 
-# Category means: the values reported in the paper's lookup table.
+# Category means, as reported in the paper.
 summ <- aggregate(a_star ~ category + n, res, mean)
 summ <- reshape(summ, idvar = "n", timevar = "category", direction = "wide")
 names(summ) <- sub("a_star\\.", "", names(summ))

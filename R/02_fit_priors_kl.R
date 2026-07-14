@@ -1,23 +1,13 @@
-# Derives the three Olkin-Liu bivariate beta priors used in the paper by
-# Kullback-Leibler minimisation:
-#   1) Non-informative: argmin_alpha D_KL( U[0,1]^2 || p_alpha )
-#   2) Informative:     argmin_alpha D_KL( p_alpha || pi_target ), where
-#      pi_target = Beta(N*mu, N*(1-mu)) x Beta(N*mu, N*(1-mu)) encodes the
-#      prior belief (mu = location, N = strength / effective sample size)
-#   3) Conflict: same as (2) with mu = 0.1, deliberately far from the data
-#
-# The fitted values are hard-coded in R/01_priors_config.R; this script only
-# needs to be re-run if the targets change.
-# Output: output/kl_priors.rds
+# Fits the three Olkin-Liu priors by KL minimisation: non-informative
+# (closest to the uniform), informative (mean 0.5) and conflict (mean 0.1).
+# The fitted values are cached in R/01_priors_config.R, so this only needs
+# to be re-run if the targets change. Writes output/kl_priors.rds.
+# Runtime: about 5 min.
 
 library(Rcpp)
-sourceCpp("src/BivBetaBinom.cpp")  # provides sample_prior(n, a0, a1, a2)
+sourceCpp("src/BivBetaBinom.cpp")
 
-# Closed-form Olkin-Liu log-density, from the gamma construction
-# V0 ~ Gamma(a0), Vj ~ Gamma(aj), theta_j = Vj / (Vj + V0):
-#   p(y1, y2) = Gamma(a) / [Gamma(a0) Gamma(a1) Gamma(a2)] *
-#               y1^(a1-1) y2^(a2-1) (1-y1)^(a0+a2-1) (1-y2)^(a0+a1-1) *
-#               (1 - y1*y2)^(-a),  with a = a0 + a1 + a2.
+# Olkin-Liu log density in closed form.
 log_p_olkin_liu <- function(y1, y2, a0, a1, a2) {
   a <- a0 + a1 + a2
   lgamma(a) - lgamma(a0) - lgamma(a1) - lgamma(a2) +
@@ -26,15 +16,13 @@ log_p_olkin_liu <- function(y1, y2, a0, a1, a2) {
     a * log1p(-y1 * y2)
 }
 
-# Monte Carlo estimate of D_KL(U || p_alpha) = -E_U[log p_alpha]
-# (log U = 0), with theta drawn from the bivariate uniform.
+# Monte Carlo estimate of D_KL(uniform || p_alpha).
 kl_U_to_p <- function(par, theta_unif) {
-  a <- exp(par)  # exp() enforces alpha > 0
+  a <- exp(par)  # keeps alpha positive
   -mean(log_p_olkin_liu(theta_unif[, 1], theta_unif[, 2], a[1], a[2], a[3]))
 }
 
-# Monte Carlo estimate of D_KL(p_alpha || pi_target), with theta drawn
-# from p_alpha via the gamma construction.
+# Monte Carlo estimate of D_KL(p_alpha || target).
 kl_p_to_target <- function(par, log_target_fun, M, eps = 1e-10) {
   a <- exp(par)
   th <- sample_prior(M, a[1], a[2], a[3])
@@ -70,7 +58,7 @@ fit_informative_kl <- function(mu = c(0.5, 0.5), N_target = 50,
                                M = 5000, n_replicates = 10,
                                seed = 42, init = c(10, 10, 10)) {
   log_target <- make_log_target_indep_beta(mu, N_target)
-  # average over replicates to smooth Monte Carlo noise in the objective
+  # replicate average smooths Monte Carlo noise in the objective
   obj <- function(par) {
     set.seed(seed)
     mean(replicate(n_replicates, kl_p_to_target(par, log_target, M)))

@@ -1,14 +1,7 @@
-# Application figures for the four TVSFP treatment conditions
-# (paper Figures "posterior_surface_*" and "error_curves_post_*"):
-#   - bivariate posterior density surface under the non-informative prior;
-#   - averaged error probabilities alpha(k), beta(k), alpha+beta as functions
-#     of k, posterior-based formulation, with the adaptive cutoff k* marked.
-# The seed matches R/06_application_tvsfp.R so the k* shown in each error
-# curve coincides with the one reported in the tables.
-#
-# Outputs: Figures/posterior_surface_{yy,yn,ny,nn}.png,
-#          Figures/error_curves_post_{yy,yn,ny,nn}.png
-# Runtime: ~5-10 min (M = 2000).
+# TVSFP figures: posterior density surfaces and averaged error curves with
+# the adaptive cutoff k* marked, for the four treatment conditions. The seed
+# matches R/06_application_tvsfp.R so both report the same k*.
+# Runtime: about 10 min.
 
 library(ALA)
 library(dplyr)
@@ -25,7 +18,7 @@ a0 <- prior_NI["a0"]; a1 <- prior_NI["a1"]; a2 <- prior_NI["a2"]
 M_POST <- 2000
 SEED   <- 7
 
-# Error-curve plot with the k* location marked.
+# Error curves with the k* location marked.
 plot_error_curves <- function(ev_H, ev_A, title, save_path,
                               k_grid = seq(0, 1, length.out = 401)) {
   curves <- error_curves(ev_H, ev_A, k_grid, 1, 1)
@@ -52,7 +45,7 @@ plot_error_curves <- function(ev_H, ev_A, title, save_path,
   invisible(opt)
 }
 
-# Complete pre/post pairs for one treatment condition.
+# Complete pre/post pairs for one condition.
 prep_group <- function(d, sb, tv) {
   wide <- d %>%
     mutate(binTHKS = ifelse(THKS >= 3, 1, 0)) %>%

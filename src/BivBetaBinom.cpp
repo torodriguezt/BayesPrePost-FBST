@@ -1,8 +1,6 @@
-// BivBetaBinom.cpp
-// C++ core for the bivariate beta-binomial model: closed-form posterior
-// density, FBST e-values by 2D quadrature, adaptive cutoff k*, and samplers
-// for the prior-based and posterior-based error formulations.
-// Compile from R with: Rcpp::sourceCpp("src/BivBetaBinom.cpp")
+// C++ core for the bivariate beta-binomial model: closed-form posterior,
+// FBST e-values by 2D quadrature, adaptive cutoff k*, and the samplers for
+// the prior-based and posterior-based error formulations.
 
 #include <Rcpp.h>
 using namespace Rcpp;

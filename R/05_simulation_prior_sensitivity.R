@@ -1,27 +1,9 @@
-# Prior-sensitivity of the FBST decision on simulated data with known truth
-# (paper Figures "sim_decision_*" / "sim_ev_*" and the rejection-count table).
-#
-# Design: baseline theta1 = 0.40; effect delta in {0.05, 0.10, 0.20};
-# sample size n in {30, 50, 75, 100, 150}; representative dataset given by the
-# expected counts x_j = round(n * theta_j). The prior is fixed, in turn, to
-# each of the three specifications used in the application:
-#   Non-informative: N0 = 2,  mu0 in {0.1, 0.3, 0.5, 0.7, 0.9}
-#   Informative:     N0 = 50, mu0 in {0.30, 0.40, 0.45, 0.50, 0.60}
-#   Conflict:        N0 = 50, mu0 in {0.05, 0.10, 0.15, 0.20, 0.25}
-# with alpha1 = alpha2 = mu0*N0 and alpha0 = (1-mu0)*N0.
-#
-# For each (mu0, n) cell the weight a* is first calibrated prior-based
-# (simulate_evs_H / simulate_evs_A, no observed data) to attain
-# alpha_phi <= 0.05; the calibrated a* is then used with the cell's counts in
-# the posterior-based cutoff k* that determines the decision. Evidence (ev)
-# is computed by deterministic 2D quadrature. ev_A draws theta from the
-# closed-form posterior by grid sampling, which remains stable under strong
-# prior-data conflict (unlike SIR).
-#
-# Outputs: Figures/sim_decision_{noninf,inf,conf}.png,
-#          Figures/sim_ev_{noninf,inf,conf}.png,
-#          output/sim_decision_by_category.csv
-# Runtime: ~30-40 min.
+# Prior sensitivity of the FBST decision on simulated data.
+# For each prior category (non-informative, informative, conflict) and each
+# combination of prior mean, sample size and effect size: calibrate a* from
+# the prior, compute the e-value and k*, and record the decision.
+# Writes the sim_decision and sim_ev heatmaps plus a summary CSV.
+# Runtime: about 35 min.
 
 library(dplyr)
 library(tidyr)
@@ -57,8 +39,8 @@ categories <- list(
 
 xss <- seq(EPS, 1 - EPS, length.out = NGS)
 
-# Draw theta from the closed-form posterior by grid sampling, then simulate
-# X* ~ Bin x Bin and return the e-value of each simulated dataset.
+# e-values of datasets simulated from the posterior (grid sampling,
+# stable under strong prior-data conflict).
 ev_A_grid <- function(consts, n, a0, a1, a2, M) {
   Z <- densBB_grid(xss, xss, consts)
   p <- as.numeric(Z) / sum(Z)
@@ -71,7 +53,7 @@ ev_A_grid <- function(consts, n, a0, a1, a2, M) {
     ev_quad_from_data(n, n, x1s[m], x2s[m], a0, a1, a2), 0.0)
 }
 
-# Prior-based a*: smallest weight with alpha_phi <= TARGET_ALPHA.
+# Smallest weight a with alpha_phi below the target, from the prior alone.
 calibrate_a_prior_based <- function(n, a0, a1, a2, seed = SEED) {
   set.seed(seed)
   evH <- simulate_evs_H(n, n, a0, a1, a2, M_cal, NGP)

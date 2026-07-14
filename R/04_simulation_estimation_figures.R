@@ -1,16 +1,8 @@
-# Simulation-study figures for the estimation section (paper Figs 3-8):
-# prior and posterior density surfaces, and posterior mean/mode versus n
-# under the three priors. All computations use the closed-form posterior
-# (2D grid), no MCMC; the *_stan.png file names are kept for historical
-# compatibility with the LaTeX sources.
-#
-# Outputs (Figures/):
-#   prior_noinf.png, post_noinf_n20_t0.1.png
-#   prior_inf_Confl.png, post_inf_n20_t0.5.png, post_inf_n20_t0.1_Confl.png
-#   mean_noinf_100_stan.png,       mode_noinf_100_stan.png
-#   mean_inf_100_NoConfl_stan.png, mode_inf_100_NoConfl_stan.png
-#   mean_inf_100_Confl_stan.png,   mode_inf_100_Confl_stan.png
-# Runtime: ~5-10 min (R_SIM = 100, n = 2:60).
+# Estimation-study figures: prior and posterior density surfaces, and
+# posterior mean and mode versus n under the three priors. Closed-form
+# posterior on a grid, no MCMC. The *_stan.png names are kept so the LaTeX
+# sources do not change.
+# Runtime: about 10 min.
 
 library(Rcpp)
 library(ggplot2)
@@ -29,7 +21,7 @@ NGRID <- 60    # grid per axis for density moments
 R_SIM <- 100   # Monte Carlo repetitions per n
 N_MAX <- 60    # maximum sample size
 
-# Marginal posterior mean and mode from the closed-form density on a grid.
+# Marginal posterior mean and mode from the density grid.
 post_moments <- function(n, x1, x2, a0, a1, a2, ngrid = NGRID) {
   consts <- bb_constants(n, n, x1, x2, a0, a1, a2)
   xs <- seq(0.001, 0.999, length.out = ngrid)
@@ -44,8 +36,7 @@ post_moments <- function(n, x1, x2, a0, a1, a2, ngrid = NGRID) {
   )
 }
 
-# For each n, simulate R datasets under theta1 = theta2 = theta_true and
-# summarise the posterior mean and mode across replications.
+# Posterior mean and mode across R simulated datasets, for each n.
 run_simulation <- function(a0, a1, a2, theta_true,
                            n_max = N_MAX, R = R_SIM, seed = 42) {
   set.seed(seed)
@@ -68,7 +59,7 @@ run_simulation <- function(a0, a1, a2, theta_true,
   }))
 }
 
-# Estimation figure: mean or mode versus n with 95% bands.
+# Mean or mode versus n with 95% bands.
 plot_estim <- function(df, theta_true, type = c("Mean", "Mode"),
                        title, path) {
   type <- match.arg(type)
@@ -105,7 +96,7 @@ plot_estim <- function(df, theta_true, type = c("Mean", "Mode"),
   cat("  ->", path, "\n")
 }
 
-# Bivariate density wireframe rendered to PNG.
+# Bivariate density wireframe saved as PNG.
 plot_density_png <- function(a0, a1, a2, n, x1, x2, path, main,
                               ngrid = 80) {
   consts <- bb_constants(n, n, x1, x2, a0, a1, a2)
@@ -157,7 +148,6 @@ plot_density_png(a0_conf, a1_conf, a2_conf, 20, x01, x01,
   "Figures/post_inf_n20_t0.1_Confl.png",
   sprintf("Posterior: conflict prior, n=20, x₁=x₂=%d", x01))
 
-# Mean and mode versus n under the three priors.
 scenarios <- list(
   list(a0=a0_kl,   a1=a1_kl,   a2=a2_kl,   theta=0.1, seed=42,
        label="Non-informative (KL-optimal), θ=0.1",
