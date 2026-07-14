@@ -8,7 +8,6 @@ beta-binomial posterior. Precise hypotheses are tested with the Full Bayesian
 Significance Test (FBST); the significance threshold `k*` is adaptive
 (a function of the sample size and the data) and the loss weight `a*` is
 calibrated prior-based so that the Type-I Bayes risk is approximately 0.05.
-All inference uses 2D numerical quadrature — no MCMC.
 
 ## Requirements
 
