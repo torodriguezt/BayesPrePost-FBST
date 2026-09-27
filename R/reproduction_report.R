@@ -13,9 +13,7 @@ fbst_manuscript_audit <- function(path) {
     "tab:thks_inf"="tvsfp_results","tab:thks_conf"="tvsfp_results",
     "tab:thks_mcnemar"="tvsfp_results","tab:between"="tvsfp_contrasts",
     "tab:toenail_ni"="toenail_results","tab:toenail_freq"="toenail_results",
-    "tab:toenail_inf"="toenail_results","prior1"="estimation_exact_sampling",
-    "prior2"="estimation_exact_sampling","prior3"="estimation_exact_sampling",
-    "sim1"="estimation_exact_sampling","sim2"="estimation_exact_sampling","sim3"="estimation_exact_sampling")
+    "tab:toenail_inf"="toenail_results","tab:estimation"="estimation_posterior_mean")
   inv <- lapply(labels,function(i) {
     label <- sub(".*\\\\label\\{([^}]+)\\}.*","\\1",text[i])
     out <- if(label %in% names(mapping))unname(mapping[label]) else ""

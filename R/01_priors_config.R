@@ -27,7 +27,7 @@ FBST_SCENARIOS <- list(
   conflict_mu=c(.05,.10,.15,.20,.25),
   boundary_sizes=matrix(c(20,20,50,50,20,100,100,20),ncol=2,byrow=TRUE),
   boundary_theta=c(.001,.01,.05,.5,.95,.99,.999),
-  design_effects=c(1,1.5,2,3),appendix_n=2:60,
+  design_effects=c(1,1.5,2,3),appendix_n=c(5L,10L,20L,40L,60L),
   null_comparison_n=c(30L,50L,100L,200L,400L),independent_n=c(30L,100L,400L))
 FBST_NUMERICS <- list(enum=list(method="grid",G=64L,max_G=256L,abs_tol=1e-5),
                       predictive=list(),near_risk=.002,predictive_mass_tol=1e-7,seed=42L)
