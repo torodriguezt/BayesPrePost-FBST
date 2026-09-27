@@ -12,7 +12,7 @@
 *.dll
 *_sourceCpp/
 
-# LaTeX (manuscript lives in Overleaf; only code is tracked here)
+# LaTeX (the manuscript lives in Overleaf, outside this repository)
 *.tex
 *.aux
 *.log
@@ -25,17 +25,19 @@
 *.fdb_latexmk
 *.pdf
 
-# Generated outputs (fully reproducible via run_all.R)
-Figures/
+# Generated tables and caches (fully reproducible via run_all.R)
 output/
-output_sensibilidad/
 *.png
 *.csv
 *.rds
 *.RData
 
-# Local archive of superseded scripts and legacy material
-archive/
+# Figures are tracked
+!Figures/**/*.png
+!Figures/**/*.pdf
+
+# Local backup: manuscript, LaTeX template, outputs, caches and legacy material
+_respaldo/
 
 # OS
 .DS_Store
@@ -45,3 +47,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# LaTeX build output
+build/
