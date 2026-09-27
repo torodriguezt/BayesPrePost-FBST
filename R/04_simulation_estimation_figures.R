@@ -1,173 +1,127 @@
-# Estimation-study figures: prior and posterior density surfaces, and
-# posterior mean and mode versus n under the three priors. Closed-form
-# posterior on a grid, no MCMC. The *_stan.png names are kept so the LaTeX
-# sources do not change.
-# Runtime: about 10 min.
-
-library(Rcpp)
-library(ggplot2)
-library(dplyr)
-library(lattice)
-
-sourceCpp("src/BivBetaBinom.cpp")
-source("R/01_priors_config.R")
-dir.create("Figures", showWarnings = FALSE)
-
-a0_kl   <- prior_NI["a0"];   a1_kl   <- prior_NI["a1"];   a2_kl   <- prior_NI["a2"]
-a0_inf  <- prior_INF["a0"];  a1_inf  <- prior_INF["a1"];  a2_inf  <- prior_INF["a2"]
-a0_conf <- prior_CONF["a0"]; a1_conf <- prior_CONF["a1"]; a2_conf <- prior_CONF["a2"]
-
-NGRID <- 60    # grid per axis for density moments
-R_SIM <- 100   # Monte Carlo repetitions per n
-N_MAX <- 60    # maximum sample size
-
-# Marginal posterior mean and mode from the density grid.
-post_moments <- function(n, x1, x2, a0, a1, a2, ngrid = NGRID) {
-  consts <- bb_constants(n, n, x1, x2, a0, a1, a2)
-  xs <- seq(0.001, 0.999, length.out = ngrid)
-  z  <- densBB_grid(xs, xs, consts)
-  z[!is.finite(z)] <- 0
-  f1 <- rowSums(z); f2 <- colSums(z)
-  list(
-    mean1 = sum(xs * f1) / sum(f1),
-    mean2 = sum(xs * f2) / sum(f2),
-    mode1 = xs[which.max(f1)],
-    mode2 = xs[which.max(f2)]
-  )
+# Appendix estimator study: exact sampling distribution of the manuscript's
+# 60x60 grid estimators. Sampling error is eliminated; grid approximation remains.
+source("R/pipeline_helpers.R")
+fbst_estimation_grid <- function(n,x1,x2,prior,G=60L) {
+  xs <- seq(.001,.999,length.out=G)
+  a0 <- prior[1]; a1 <- prior[2]; a2 <- prior[3]
+  p1 <- (a1+x1-1)*log(xs)+(a2+a0+n-x1-1)*log1p(-xs)
+  p2 <- (a2+x2-1)*log(xs)+(a1+a0+n-x2-1)*log1p(-xs)
+  L <- outer(p1,p2,"+")-sum(prior)*log1p(-outer(xs,xs))
+  z <- exp(L-max(L)); marg <- rowSums(z)
+  mean <- sum(xs*marg)/sum(marg)
+  candidates <- which(marg>=max(marg)*(1-1e-12))
+  mode_grid <- xs[candidates[1]]
+  # Marginal endpoint exponents from the hypergeometric marginal density.
+  left <- a1+x1-1
+  right <- min(a2+a0+n-x1-1,a0+2*n-x1-x2-1)
+  log_boundary <- abs(n-x2-a2)<1e-14 && abs(right)<1e-14
+  status <- if(left<0 && (right<0 || log_boundary)) "both_endpoints_unbounded" else
+    if(left<0) "unbounded_at_zero" else if(right<0 || log_boundary) "unbounded_at_one" else
+    if(length(candidates)>1) "multiple_grid_maxima" else
+    if(candidates %in% c(1,G)) "grid_endpoint_not_interior_mode" else "interior_grid_maximum"
+  c(mean=mean,grid_mode=mode_grid,
+    boundary_mode=if(status=="unbounded_at_zero")0 else if(status=="unbounded_at_one")1 else mode_grid,
+    status_code=match(status,c("both_endpoints_unbounded","unbounded_at_zero","unbounded_at_one",
+                              "multiple_grid_maxima","grid_endpoint_not_interior_mode","interior_grid_maximum")))
 }
-
-# Posterior mean and mode across R simulated datasets, for each n.
-run_simulation <- function(a0, a1, a2, theta_true,
-                           n_max = N_MAX, R = R_SIM, seed = 42) {
-  set.seed(seed)
-  n_vals <- 2:n_max
-  cat(sprintf("  n = 2:%d, R = %d reps each...\n", n_max, R))
-  do.call(rbind, lapply(n_vals, function(n) {
-    res <- replicate(R, {
-      x1 <- rbinom(1, n, theta_true)
-      x2 <- rbinom(1, n, theta_true)
-      m  <- post_moments(n, x1, x2, a0, a1, a2)
-      c(m$mean1, m$mean2, m$mode1, m$mode2)
-    })
-    data.frame(
-      n    = n,
-      mE1  = mean(res[1, ]), loE1 = quantile(res[1, ], .025), hiE1 = quantile(res[1, ], .975),
-      mE2  = mean(res[2, ]), loE2 = quantile(res[2, ], .025), hiE2 = quantile(res[2, ], .975),
-      mMo1 = mean(res[3, ]), loMo1= quantile(res[3, ], .025), hiMo1= quantile(res[3, ], .975),
-      mMo2 = mean(res[4, ]), loMo2= quantile(res[4, ], .025), hiMo2= quantile(res[4, ], .975)
-    )
-  }))
+fbst_weighted_quantile <- function(x,w,p) {
+  o <- order(x); x[o][which(cumsum(w[o])/sum(w)>=p)[1]]
 }
-
-# Mean or mode versus n with 95% bands.
-plot_estim <- function(df, theta_true, type = c("Mean", "Mode"),
-                       title, path) {
-  type <- match.arg(type)
-  if (type == "Mean") {
-    d <- rbind(
-      data.frame(n=df$n, est=df$mE1,  lo=df$loE1,  hi=df$hiE1,
-                 param = paste0("E(θ₁)")),
-      data.frame(n=df$n, est=df$mE2,  lo=df$loE2,  hi=df$hiE2,
-                 param = paste0("E(θ₂)"))
-    )
-  } else {
-    d <- rbind(
-      data.frame(n=df$n, est=df$mMo1, lo=df$loMo1, hi=df$hiMo1,
-                 param = paste0("Mode(θ₁)")),
-      data.frame(n=df$n, est=df$mMo2, lo=df$loMo2, hi=df$hiMo2,
-                 param = paste0("Mode(θ₂)"))
-    )
+fbst_run_estimation <- function() {
+  scenarios <- list(KL=list(prior=FBST_PRIORS$KL,theta=.1),
+                    informative=list(prior=FBST_PRIORS$estimation,theta=.5),
+                    conflict=list(prior=FBST_PRIORS$estimation,theta=.1))
+  ns <- if(fbst_profile()=="pilot")c(2L,5L,10L) else FBST_SCENARIOS$appendix_n
+  rows <- list()
+  for(nm in names(scenarios)) {
+    sc <- scenarios[[nm]]
+    for(n in ns) {
+      message("Appendix grid estimator: ",nm,", n=",n)
+      values <- fbst_cache_compute("estimation_grid",list(n=n,prior=sc$prior,G=60L,
+              algorithm="60x60-marginals-v2"),function() {
+        xy <- expand.grid(x1=0:n,x2=0:n)
+        v <- t(vapply(seq_len(nrow(xy)),function(i)
+          fbst_estimation_grid(n,xy$x1[i],xy$x2[i],sc$prior),numeric(4)))
+        cbind(xy,as.data.frame(v))
+      })
+      w <- dbinom(values$x1,n,sc$theta)*dbinom(values$x2,n,sc$theta)
+      for(estimator in c("mean","grid_mode","boundary_mode")) {
+        v <- values[[estimator]]
+        rows[[length(rows)+1L]] <- data.frame(scenario=nm,n=n,theta=sc$theta,estimator=estimator,
+          expectation=sum(w*v),bias=sum(w*(v-sc$theta)),rmse=sqrt(sum(w*(v-sc$theta)^2)),
+          q025=fbst_weighted_quantile(v,w,.025),q975=fbst_weighted_quantile(v,w,.975),
+          probability_unbounded_at_zero=sum(w[values$status_code==2]),
+          probability_unbounded_at_one=sum(w[values$status_code==3]),
+          sampling_method="finite_enumeration",estimator_method="60x60_grid",
+          mc_standard_error=0)
+      }
+    }
   }
-  true_lbl <- sprintf("θ₁=θ₂=%.1f", theta_true)
-  p <- ggplot(d, aes(x = n)) +
-    geom_ribbon(aes(ymin = lo, ymax = hi, fill = param), alpha = 0.2) +
-    geom_line(aes(y = est, color = param), linewidth = 0.8) +
-    geom_hline(aes(yintercept = theta_true, linetype = true_lbl),
-               color = "black", linewidth = 0.6) +
-    scale_color_manual(name = "Estimated",
-                       values = c("#888888", "#00bcd4")) +
-    scale_fill_manual(name  = "Estimated",
-                      values = c("#888888", "#00bcd4")) +
-    scale_linetype_manual(name = "Real", values = "dashed") +
-    labs(x = "n", y = type, title = title) +
-    theme_bw() +
-    theme(legend.position = "right")
-  ggsave(path, p, width = 7, height = 5, dpi = 120)
-  cat("  ->", path, "\n")
+  out <- do.call(rbind,rows); fbst_write_table(out,"estimation_exact_sampling")
+  # Refinement diagnostics for the actual grid approximation, not for sampling error.
+  diagnostic <- list()
+  for(nm in names(scenarios)) for(n in c(2,5,20,60)) for(x in unique(c(0,round(n*scenarios[[nm]]$theta),n))) {
+    p <- scenarios[[nm]]$prior
+    g60 <- fbst_estimation_grid(n,x,x,p,60); g120 <- fbst_estimation_grid(n,x,x,p,120)
+    parameters <- .fbst_par(x,n,x,n,p)
+    denominator <- .fbst_normalizer(parameters)$logZ
+    numerator <- .fbst_normalizer(parameters+c(1,0,0,0,0))$logZ
+    continuous_mean <- exp(numerator-denominator)
+    diagnostic[[length(diagnostic)+1L]] <- data.frame(scenario=nm,n=n,x1=x,x2=x,
+      mean_grid60=g60["mean"],mean_grid120=g120["mean"],difference=g120["mean"]-g60["mean"],
+      continuous_mean=continuous_mean,grid60_error=g60["mean"]-continuous_mean,
+      mode_grid60=g60["grid_mode"],mode_grid120=g120["grid_mode"],status_code=g60["status_code"])
+  }
+  fbst_write_table(do.call(rbind,diagnostic),"estimation_grid_refinement")
+  figure <- function(draw,name) {
+    for(ext in c("pdf","png")) {
+      path <- file.path(fbst_figure_dir(),paste0(name,".",ext))
+      if(ext=="pdf")pdf(path,width=10,height=4) else png(path,width=1800,height=720,res=180)
+      tryCatch(draw(),finally=dev.off())
+    }
+  }
+  names_est <- c(KL="est_fig4_mode_mean_noninformative",informative="est_fig6_mode_mean_informative",
+                 conflict="est_fig8_mode_mean_conflict")
+  for(nm in names(scenarios)) {
+    figure(function() {
+      par(mfrow=c(1,2),mar=c(4,4,3,1))
+      for(est in c("grid_mode","mean")) {
+        d <- out[out$scenario==nm & out$estimator==est,]
+        plot(d$n,d$expectation,type="n",ylim=range(d$q025,d$q975,d$theta),
+             xlab="n",ylab=if(est=="mean")"Posterior grid mean" else "Marginal grid mode",
+             main=nm)
+        polygon(c(d$n,rev(d$n)),c(d$q025,rev(d$q975)),col="#C8E8F2",border=NA)
+        lines(d$n,d$expectation,col="#19768E",lwd=2);abline(h=d$theta[1],lty=2)
+      }
+    },names_est[[nm]])
+  }
+  density_names <- c(KL="est_fig3_prior_post_noninformative",informative="est_fig5_prior_post_informative",
+                     conflict="est_fig7_prior_post_conflict")
+  for(nm in names(scenarios)) {
+    sc <- scenarios[[nm]]
+    figure(function() {
+      par(mfrow=c(1,2),mar=c(3,3,3,1))
+      xs <- seq(.001,.999,length.out=80)
+      for(n in c(0L,20L)) {
+        x <- round(n*sc$theta);p <- sc$prior
+        lp <- (p[2]+x-1)*log(xs)+(p[1]+p[3]+n-x-1)*log1p(-xs)
+        L <- outer(lp,lp,"+")-sum(p)*log1p(-outer(xs,xs))
+        z <- exp(L-max(L));z <- z/(sum(z)*diff(xs)[1]^2)
+        persp(xs,xs,z,theta=40,phi=25,col="#D7B34B",border=NA,ticktype="simple",
+              xlab="theta1",ylab="theta2",zlab="Grid density",
+              main=if(n==0)"Prior (grid display)" else paste("Posterior n=20, x1=x2=",x))
+      }
+    },density_names[[nm]])
+  }
+  writeLines(c("# Appendix methodology changes",
+    "The sampling distribution is enumerated, replacing 100 simulation replicates. No sampling seeds or Monte Carlo bands are involved.",
+    "The retained estimator is explicitly the manuscript's 60x60 grid mean / marginal grid mode on [0.001,0.999].",
+    "It remains a numerical approximation; see estimation_grid_refinement.csv before interpreting it as the continuous posterior mean.",
+    "The q025/q975 bands describe the estimator's sampling distribution, not posterior uncertainty or the MC error of its average.",
+    "boundary_mode replaces grid endpoints by 0 or 1 only when marginal density is analytically unbounded there.",
+    "Interior grid maxima are not certified continuous modes; status_code identifies this limitation.",
+    "Density figures are finite-grid displays; singular prior corners are not represented as finite exact density maxima."),
+    file.path(fbst_output_dir(),"appendix_method_changes.md"))
+  invisible(out)
 }
-
-# Bivariate density wireframe saved as PNG.
-plot_density_png <- function(a0, a1, a2, n, x1, x2, path, main,
-                              ngrid = 80) {
-  consts <- bb_constants(n, n, x1, x2, a0, a1, a2)
-  xs <- seq(0.001, 0.999, length.out = ngrid)
-  z  <- densBB_grid(xs, xs, consts)
-  z[!is.finite(z)] <- 0
-  cap <- quantile(z, 0.99)
-  z[z > cap] <- cap
-  df <- expand.grid(theta1 = xs, theta2 = xs)
-  df$density <- as.vector(z)
-  p <- wireframe(
-    density ~ theta1 * theta2, data = df,
-    xlab = expression(theta[1]),
-    ylab = expression(theta[2]),
-    zlab = NULL,
-    main = main,
-    scales = list(arrows = FALSE, cex = 0.7),
-    drape = TRUE,
-    col.regions = "lightblue",
-    colorkey = FALSE,
-    screen = list(z = -30, x = -60),
-    par.settings = list(axis.line = list(col = "transparent"))
-  )
-  png(path, width = 700, height = 600, res = 100)
-  print(p)
-  dev.off()
-  cat("  ->", path, "\n")
-}
-
-cat("\nPrior densities\n")
-plot_density_png(a0_kl, a1_kl, a2_kl, 0, 0, 0,
-  "Figures/prior_noinf.png",
-  sprintf("Non-informative prior (α=%.2f)", a0_kl))
-plot_density_png(a0_inf, a1_inf, a2_inf, 0, 0, 0,
-  "Figures/prior_inf_Confl.png",
-  sprintf("Informative prior (α₀=%.1f, α₁=α₂=%.1f)",
-          a0_inf, a1_inf))
-
-cat("\nPosterior densities (n = 20)\n")
-x01 <- round(0.1 * 20)
-x05 <- round(0.5 * 20)
-plot_density_png(a0_kl, a1_kl, a2_kl, 20, x01, x01,
-  "Figures/post_noinf_n20_t0.1.png",
-  sprintf("Posterior: non-inf., n=20, x₁=x₂=%d", x01))
-plot_density_png(a0_inf, a1_inf, a2_inf, 20, x05, x05,
-  "Figures/post_inf_n20_t0.5.png",
-  sprintf("Posterior: inf., n=20, x₁=x₂=%d (no conflict)", x05))
-plot_density_png(a0_conf, a1_conf, a2_conf, 20, x01, x01,
-  "Figures/post_inf_n20_t0.1_Confl.png",
-  sprintf("Posterior: conflict prior, n=20, x₁=x₂=%d", x01))
-
-scenarios <- list(
-  list(a0=a0_kl,   a1=a1_kl,   a2=a2_kl,   theta=0.1, seed=42,
-       label="Non-informative (KL-optimal), θ=0.1",
-       mean_out = "Figures/mean_noinf_100_stan.png",
-       mode_out = "Figures/mode_noinf_100_stan.png"),
-  list(a0=a0_inf,  a1=a1_inf,  a2=a2_inf,  theta=0.5, seed=43,
-       label="Informative (no conflict), θ=0.5",
-       mean_out = "Figures/mean_inf_100_NoConfl_stan.png",
-       mode_out = "Figures/mode_inf_100_NoConfl_stan.png"),
-  list(a0=a0_conf, a1=a1_conf, a2=a2_conf, theta=0.1, seed=44,
-       label="Informative (conflict), θ=0.1",
-       mean_out = "Figures/mean_inf_100_Confl_stan.png",
-       mode_out = "Figures/mode_inf_100_Confl_stan.png")
-)
-
-for (sc in scenarios) {
-  cat(sprintf("\n%s\n", sc$label))
-  df <- run_simulation(sc$a0, sc$a1, sc$a2, sc$theta, seed = sc$seed)
-  plot_estim(df, sc$theta, "Mean", sc$label, sc$mean_out)
-  plot_estim(df, sc$theta, "Mode", sc$label, sc$mode_out)
-}
-
-cat("\nDone. Simulation figures written to Figures/\n")
+if(sys.nframe()==0L)fbst_run_estimation()
