@@ -1,48 +1,51 @@
-# Bayesian pretest–posttest analysis for binary outcomes
+# Adaptive FBST for pretest–posttest proportions
 
-Code for the paper *"Bayesian analysis for pretest-posttest binary outcomes
-with adaptive significance levels"*. The method compares two dependent
-proportions (pre- vs. post-treatment success probabilities) with an
-Olkin–Liu bivariate beta prior, which yields a closed-form bivariate
-beta-binomial posterior. Precise hypotheses are tested with the Full Bayesian
-Significance Test (FBST); the significance threshold `k*` is adaptive
-(a function of the sample size and the data) and the loss weight `a*` is
-calibrated prior-based so that the Type-I Bayes risk is approximately 0.05.
+Code to reproduce the tables and figures of the article. It tests H: θ₁ = θ₂
+with the FBST, a bivariate beta prior (Olkin–Liu) and an adaptive cutoff k*
+that minimises α + β, computed by exact enumeration of the sample space.
 
-## Requirements
+## Installation
 
-R with packages: `Rcpp`, `ALA` (TVSFP data), `dplyr`, `tidyr`, `ggplot2`,
-`lattice`, plus a C++ compiler for `Rcpp::sourceCpp`.
+```r
+install.packages(c("Rcpp", "statmod", "ALA"))
+```
 
-## Reproducing the paper
+A C++ compiler for Rcpp is required.
+
+## Usage
 
 From the repository root:
 
-```r
-Rscript run_all.R
+```sh
+Rscript run_all.R --stage=all --profile=full --keep-going
 ```
 
-This regenerates every table and figure (about 2 hours). Outputs are written
-to `Figures/` (PNG) and `output/` (CSV / RDS / TeX fragments); both are
-git-ignored. Each step can also be run on its own.
+- Stages: `validate`, `pilot`, `main`, `boundaries`, `applications`, `vaping`, `appendix`, `export`.
+- A single task: `--stage=main --task=power`.
+- `--profile=pilot` runs a reduced test version.
+- If interrupted, rerun the same command: cached results are reused.
 
-## Structure
+The `vaping` stage analyses `vapeo_mccauley2023.csv` (McCauley et al., 2023):
 
-| Path | Purpose |
-|------|---------|
-| `run_all.R` | Master script: runs the full pipeline in order |
-| `src/BivBetaBinom.cpp` | Computational core: closed-form posterior, FBST e-values by 2D quadrature, adaptive cutoff `k*`, prior- and posterior-based samplers |
-| `R/01_priors_config.R` | Hyperparameters of the three priors (single source of truth) |
-| `R/02_fit_priors_kl.R` | Derives the priors by Kullback–Leibler minimisation |
-| `R/03_calibrate_weights.R` | Prior-based calibration of the loss weight `a*` as a function of `n` and the prior (reference lookup table) |
-| `R/04_simulation_estimation_figures.R` | Estimation study: prior/posterior surfaces, posterior mean and mode vs. `n` |
-| `R/05_simulation_prior_sensitivity.R` | Prior-sensitivity of the FBST decision on simulated data (heatmaps by prior category) |
-| `R/06_application_tvsfp.R` | TVSFP application: FBST tables under the three priors (calibrated `a*`) and McNemar benchmark |
-| `R/07_application_figures.R` | TVSFP posterior surfaces and error curves |
+```sh
+Rscript run_all.R --stage=vaping --profile=full
+```
 
-## Data
+## Outputs
 
-The application uses the Television School and Family Smoking Prevention and
-Cessation Project (TVSFP) subset shipped with the R package `ALA`
-(4 Los Angeles schools; binary outcome: THKS score >= 3). No data files are
-stored in this repository.
+- Tables: `output/reproducible_r/2.0.0/full/`
+- Figures: `Figures/reproducible_r/2.0.0/full/`
+
+## Code
+
+| File | Contents |
+|---|---|
+| `R/exact_fbst.R`, `R/exact_fbst_core.cpp` | Posterior, e-values, predictive distributions and cutoffs |
+| `R/01_priors_config.R`, `R/02_fit_priors_kl.R` | Priors and the KL-optimal prior |
+| `R/pipeline_helpers.R` | Caching, calibration and export |
+| `R/validate_numerics.R` | Numerical validation |
+| `R/manuscript_experiments.R` | Numerical evaluation and appendix |
+| `R/manuscript_applications.R` | TVSFP and onychomycosis applications |
+| `R/application_vaping.R` | Vaping application |
+| `R/04_simulation_estimation_figures.R` | Estimation appendix |
+| `R/reproduction_report.R` | Run report |
