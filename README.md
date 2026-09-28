@@ -25,7 +25,7 @@ Rscript run_all.R --stage=all --profile=full --keep-going
 - `--profile=pilot` runs a reduced test version.
 - If interrupted, rerun the same command: cached results are reused.
 
-The `vaping` stage analyses `vapeo_mccauley2023.csv` (McCauley et al., 2023):
+The `vaping` stage analyses `vaping_mccauley2023.csv` (McCauley et al., 2023):
 
 ```sh
 Rscript run_all.R --stage=vaping --profile=full
