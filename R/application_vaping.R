@@ -4,18 +4,19 @@
 # design-effect sensitivity, and the incomplete-follow-up analysis.
 # Sourcing defines functions only.
 #
-# Input: a CSV of published summary counts, one row per (muestra, item).
-#   muestra = "vinculada": students linked pre and post. Uses N, x1, x2 and, when
-#             available, the transition cells n00, n01, n10, n11.
-#   muestra = "completa":  every student observed at each stage. Uses n_pre, n_post,
-#             x1, x2 (optional columns; if x1/x2 are empty they are rounded from
-#             pct_pre/pct_post). Rows with empty margins are skipped as pending.
-# The path defaults to vapeo_mccauley2023.csv; override it with FBST_VAPING_DATA.
+# Input: a CSV of published summary counts, one row per (sample, item).
+#   sample = "linked": students linked pre and post. Uses n1 = n2, x1, x2 and, when
+#            available, the transition cells n00, n01, n10, n11.
+#   sample = "full":   every student observed at each stage. Uses n1, n2, x1, x2
+#            (if x1/x2 are empty they are rounded from pct_pre/pct_post).
+#            Rows with empty margins are skipped as pending.
+# Items: nicotine_delivery_form, daily_use_addiction, addiction_definition.
+# The path defaults to vaping_mccauley2023.csv; override it with FBST_VAPING_DATA.
 # Priors default to KL, informative and conflict; restrict them with
 # FBST_VAPING_PRIORS, e.g. FBST_VAPING_PRIORS=KL.
 if (!exists("fbst_app_fit", mode = "function")) source("R/manuscript_applications.R")
 
-fbst_vaping_path <- function() Sys.getenv("FBST_VAPING_DATA", "vapeo_mccauley2023.csv")
+fbst_vaping_path <- function() Sys.getenv("FBST_VAPING_DATA", "vaping_mccauley2023.csv")
 
 fbst_vaping_priors <- function() {
   keys <- trimws(strsplit(Sys.getenv("FBST_VAPING_PRIORS", "KL,informative,conflict"), ",")[[1]])
@@ -31,7 +32,7 @@ fbst_vaping_data <- function(path = fbst_vaping_path()) {
   if (!file.exists(path)) stop("Vaping data not found: ", path, " (set FBST_VAPING_DATA).")
   raw <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE,
                          na.strings = c("", "NA"))
-  miss <- setdiff(c("muestra", "item", "x1", "x2"), names(raw))
+  miss <- setdiff(c("sample", "item", "x1", "x2"), names(raw))
   if (length(miss)) stop("Vaping data lacks columns: ", paste(miss, collapse = ", "))
   # Sample sizes: n1/n2 per row (current layout) or N / n_pre / n_post (earlier layout).
   if (!"n1" %in% names(raw)) raw$n1 <- if ("n_pre" %in% names(raw)) raw$n_pre else NA
@@ -39,21 +40,21 @@ fbst_vaping_data <- function(path = fbst_vaping_path()) {
   if ("N" %in% names(raw)) {
     raw$n1 <- ifelse(is.na(raw$n1), raw$N, raw$n1); raw$n2 <- ifelse(is.na(raw$n2), raw$N, raw$n2)
   }
-  # Published McNemar statistic: its own column, or "chi2=..." inside test_publicado.
-  if (!"chi2_mcnemar_publicado" %in% names(raw) && "test_publicado" %in% names(raw)) {
-    hit <- regmatches(raw$test_publicado, regexpr("chi2 *= *[0-9.]+", raw$test_publicado))
-    raw$chi2_mcnemar_publicado <- NA
-    raw$chi2_mcnemar_publicado[grepl("chi2 *= *[0-9.]+", raw$test_publicado)] <- sub("chi2 *= *", "", hit)
+  # Published McNemar statistic: its own column, or "chi2=..." inside test_published.
+  if (!"chi2_mcnemar_published" %in% names(raw) && "test_published" %in% names(raw)) {
+    hit <- regmatches(raw$test_published, regexpr("chi2 *= *[0-9.]+", raw$test_published))
+    raw$chi2_mcnemar_published <- NA
+    raw$chi2_mcnemar_published[grepl("chi2 *= *[0-9.]+", raw$test_published)] <- sub("chi2 *= *", "", hit)
   }
-  optional <- c("descripcion", "pct_pre", "pct_post", "n00", "n01", "n10", "n11",
-                "psi", "chi2_mcnemar_publicado")
+  optional <- c("description", "pct_pre", "pct_post", "n00", "n01", "n10", "n11",
+                "psi", "chi2_mcnemar_published")
   for (v in setdiff(optional, names(raw))) raw[[v]] <- NA
-  raw$descripcion <- ifelse(is.na(raw$descripcion), raw$item, raw$descripcion)
+  raw$description <- ifelse(is.na(raw$description), raw$item, raw$description)
   num <- function(x) suppressWarnings(as.numeric(x))
   one <- function(d, v) if (nrow(d)) num(d[[v]][1L]) else NA_real_
   rows <- lapply(unique(raw$item), function(it) {
-    L <- raw[raw$muestra == "vinculada" & raw$item == it, , drop = FALSE]
-    C <- raw[raw$muestra == "completa" & raw$item == it, , drop = FALSE]
+    L <- raw[raw$sample == "linked" & raw$item == it, , drop = FALSE]
+    C <- raw[raw$sample == "full" & raw$item == it, , drop = FALSE]
     if (nrow(L) > 1L || nrow(C) > 1L) stop("Duplicated item/sample rows for item ", it)
     # Linked (complete-pairs) sample.
     n_cc <- one(L, "n1"); x1_cc <- one(L, "x1"); x2_cc <- one(L, "x2")
@@ -86,7 +87,7 @@ fbst_vaping_data <- function(path = fbst_vaping_path()) {
     if (!full) { n1 <- n2 <- x1 <- x2 <- NA_real_; source_x <- NA_character_ }
     if (!has_cells) cells[] <- NA_real_
     data.frame(study = "vaping", group = it,
-      descripcion = if (nrow(L)) L$descripcion[1L] else C$descripcion[1L],
+      description = if (nrow(L)) L$description[1L] else C$description[1L],
       n1 = n1, x1 = x1, n2 = n2, x2 = x2, full_available = full, full_margins_source = source_x,
       n_cc = n_cc, x1_cc = x1_cc, x2_cc = x2_cc, linked_available = linked,
       n00 = cells[["n00"]], n01 = cells[["n01"]], n10 = cells[["n10"]], n11 = cells[["n11"]],
@@ -99,7 +100,7 @@ fbst_vaping_data <- function(path = fbst_vaping_path()) {
       psi_published = one(L, "psi"),
       chi2_cc = if (has_cells && cells[["n01"]] + cells[["n10"]] > 0)
         (abs(cells[["n01"]] - cells[["n10"]]) - 1)^2 / (cells[["n01"]] + cells[["n10"]]) else NA_real_,
-      chi2_published = one(L, "chi2_mcnemar_publicado"),
+      chi2_published = one(L, "chi2_mcnemar_published"),
       pct_pre_linked = one(L, "pct_pre"), pct_post_linked = one(L, "pct_post"),
       pct_pre_full = one(C, "pct_pre"), pct_post_full = one(C, "pct_post"),
       data_source = basename(path), ALA_version = NA_character_, stringsAsFactors = FALSE)
@@ -114,24 +115,24 @@ fbst_audit_vaping_data <- function(dat = fbst_vaping_data()) {
   fbst_write_table(dat, "vaping_transition")
   add <- function(item, sample, check, computed, reported, tolerance)
     if (is.finite(computed) && is.finite(reported))
-      data.frame(item = item, muestra = sample, check = check, computed = computed,
+      data.frame(item = item, sample = sample, check = check, computed = computed,
                  reported = reported, difference = computed - reported,
                  agrees = abs(computed - reported) <= tolerance)
   rows <- list()
   for (i in seq_len(nrow(dat))) {
     d <- dat[i, ]
     rows <- c(rows, list(
-      add(d$group, "vinculada", "pct_pre", 100 * d$x1_cc / d$n_cc, d$pct_pre_linked, 0.05),
-      add(d$group, "vinculada", "pct_post", 100 * d$x2_cc / d$n_cc, d$pct_post_linked, 0.05),
-      add(d$group, "vinculada", "psi", d$psi, d$psi_published, 0.006),
+      add(d$group, "linked", "pct_pre", 100 * d$x1_cc / d$n_cc, d$pct_pre_linked, 0.05),
+      add(d$group, "linked", "pct_post", 100 * d$x2_cc / d$n_cc, d$pct_post_linked, 0.05),
+      add(d$group, "linked", "psi", d$psi, d$psi_published, 0.006),
       # The published McNemar statistic includes the continuity correction.
-      add(d$group, "vinculada", "chi2_mcnemar_continuity_corrected", d$chi2_cc, d$chi2_published, 0.006),
-      add(d$group, "completa", "pct_pre", 100 * d$x1 / d$n1, d$pct_pre_full, 0.05),
-      add(d$group, "completa", "pct_post", 100 * d$x2 / d$n2, d$pct_post_full, 0.05)))
+      add(d$group, "linked", "chi2_mcnemar_continuity_corrected", d$chi2_cc, d$chi2_published, 0.006),
+      add(d$group, "full", "pct_pre", 100 * d$x1 / d$n1, d$pct_pre_full, 0.05),
+      add(d$group, "full", "pct_post", 100 * d$x2 / d$n2, d$pct_post_full, 0.05)))
   }
   rows <- Filter(Negate(is.null), rows)
   out <- if (length(rows)) do.call(rbind, rows) else
-    data.frame(item = character(), muestra = character(), check = character())
+    data.frame(item = character(), sample = character(), check = character())
   fbst_write_table(out, "vaping_data_audit")
   fbst_vaping_missingness(dat)
   if (nrow(out) && any(!out$agrees)) warning("Vaping data audit: some published summaries disagree; see vaping_data_audit.csv")
@@ -145,8 +146,8 @@ fbst_vaping_fit <- function(g, prior, prior_key, D, analysis, calibrate) {
   if (!isTRUE(g$cells_available)) h$n01 <- h$n10 <- 0
   r <- fbst_app_fit(h, prior, prior_key, D, analysis = analysis, calibrate = calibrate)
   if (!isTRUE(g$cells_available) || analysis != "complete") r$p_mcn <- NA_real_
-  r$muestra <- if (analysis == "complete") "vinculada" else "completa"
-  r$descripcion <- g$descripcion
+  r$sample <- if (analysis == "complete") "linked" else "full"
+  r$description <- g$description
   r
 }
 
@@ -158,7 +159,7 @@ run_application_vaping <- function(calibrate = fbst_profile() == "full") {
       g <- dat[i, ]
       if (analysis == "complete" && !g$linked_available) next
       if (analysis == "observed" && !g$full_available) next
-      message("Vaping ", g$group, "; muestra=", if (analysis == "complete") "vinculada" else "completa",
+      message("Vaping ", g$group, "; sample=", if (analysis == "complete") "linked" else "full",
               "; prior=", p, "; D=", D)
       rows[[length(rows) + 1L]] <- fbst_vaping_fit(g, priors[[p]], p, D, analysis, calibrate)
       fbst_write_table(do.call(rbind, rows), "vaping_results")
@@ -208,7 +209,7 @@ run_vaping_tables <- function() {
   if (is.null(res)) stop("vaping_results.csv not found; run the vaping results task first.")
   dat <- fbst_app_read("vaping_transition")
   main <- res[res$D == 1, , drop = FALSE]
-  cols <- c("group", "muestra", "n1", "n2", "x1", "x2", "delta_mean", "delta_lo", "delta_hi",
+  cols <- c("group", "sample", "n1", "n2", "x1", "x2", "delta_mean", "delta_lo", "delta_hi",
             "prob_gt", "ev", "k_star", "alpha_star_original", "beta_star_original", "reject",
             "calibration_status")
   # Analogues of tab:thks_ni / tab:thks_inf / tab:thks_conf.
@@ -217,20 +218,20 @@ run_vaping_tables <- function() {
   # Analogue of tab:thks_mcnemar: asymptotic McNemar without continuity correction on
   # the linked pairs and two-sample z-test on the margins, at level 0.05.
   base <- main[main$prior_key == unique(main$prior_key)[1L], , drop = FALSE]
-  freq <- base[, c("group", "muestra", "n1", "n2", "x1", "x2", "p_z", "p_mcn", "reject")]
+  freq <- base[, c("group", "sample", "n1", "n2", "x1", "x2", "p_z", "p_mcn", "reject")]
   freq$reject_z <- freq$p_z <= 0.05
   freq$reject_mcnemar <- ifelse(is.na(freq$p_mcn), NA, freq$p_mcn <= 0.05)
   freq$chi2_cc_computed <- dat$chi2_cc[match(freq$group, dat$group)]
   freq$chi2_cc_published <- dat$chi2_published[match(freq$group, dat$group)]
-  freq$chi2_cc_computed[freq$muestra != "vinculada"] <- NA
-  freq$chi2_cc_published[freq$muestra != "vinculada"] <- NA
+  freq$chi2_cc_computed[freq$sample != "linked"] <- NA
+  freq$chi2_cc_published[freq$sample != "linked"] <- NA
   names(freq)[names(freq) == "reject"] <- paste0("reject_fbst_", unique(main$prior_key)[1L])
   fbst_write_table(freq, "vaping_frequentist")
   # Design-effect sensitivity with the ORIGINAL cutoffs (TVSFP design-effect paragraph).
   de <- res[res$prior_key == unique(res$prior_key)[1L],
-            c("group", "muestra", "D", "likelihood_power", "ev", "k_star", "reject",
+            c("group", "sample", "D", "likelihood_power", "ev", "k_star", "reject",
               "delta_mean", "delta_lo", "delta_hi", "prob_gt")]
-  fbst_write_table(de[order(de$group, de$muestra, de$D), ], "vaping_design_effect")
+  fbst_write_table(de[order(de$group, de$sample, de$D), ], "vaping_design_effect")
   fbst_vaping_validation()
   invisible(main)
 }
@@ -240,9 +241,9 @@ fbst_vaping_validation <- function() {
   if (is.null(fits) || is.null(dat)) return(invisible(NULL))
   expected <- length(unique(fits$prior_key)) * length(unique(fits$D)) *
     (sum(dat$linked_available) + sum(dat$full_available))
-  base <- fits[fits$D == 1, c("group", "muestra", "prior_key", "k_star")]
-  other <- fits[fits$D != 1, c("group", "muestra", "prior_key", "k_star")]
-  key <- function(x) paste(x$group, x$muestra, x$prior_key)
+  base <- fits[fits$D == 1, c("group", "sample", "prior_key", "k_star")]
+  other <- fits[fits$D != 1, c("group", "sample", "prior_key", "k_star")]
+  key <- function(x) paste(x$group, x$sample, x$prior_key)
   kdiff <- if (nrow(other) && any(is.finite(other$k_star)))
     max(abs(other$k_star - base$k_star[match(key(other), key(base))]), na.rm = TRUE) else 0
   out <- data.frame(
@@ -268,18 +269,26 @@ run_vaping_figures <- function() {
   dat <- fbst_vaping_data(); prior <- FBST_PRIORS$KL
   cols <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9")
   item_col <- setNames(cols[(seq_len(nrow(dat)) - 1L) %% length(cols) + 1L], dat$group)
-  samples <- list(vinculada = function(g) if (g$linked_available)
+  samples <- list(linked = function(g) if (g$linked_available)
                     list(x1 = g$x1_cc, n1 = g$n_cc, x2 = g$x2_cc, n2 = g$n_cc),
-                  completa = function(g) if (g$full_available)
+                  full = function(g) if (g$full_available)
                     list(x1 = g$x1, n1 = g$n1, x2 = g$x2, n2 = g$n2))
   samples <- Filter(function(f) any(vapply(seq_len(nrow(dat)), function(i) !is.null(f(dat[i, ])), TRUE)), samples)
+  # Display labels; the data keep the item codes as identifiers.
+  item_labels <- c(nicotine_delivery_form = "Nicotine delivery form",
+                   daily_use_addiction = "Daily use and addiction",
+                   addiction_definition = "Definition of addiction")
+  item_label <- function(x) ifelse(x %in% names(item_labels), item_labels[x],
+    tools::toTitleCase(gsub("_", " ", x)))
+  sample_labels <- c(linked = "linked sample", full = "full sample")
+  prior_labels <- c(KL = "KL-optimal prior", informative = "informative prior", conflict = "conflicting prior")
   status <- list(); paths <- character()
   # 1. Joint posteriors under the KL-optimal prior (analogue of app_posterior_contours).
   paths <- c(paths, fbst_app_plot_files("vaping_posterior_contours", function() {
     graphics::par(mfrow = c(1, length(samples)), mar = c(4.3, 4.3, 2, 1))
     for (s in names(samples)) {
       graphics::plot(NA_real_, NA_real_, xlim = c(0, 1), ylim = c(0, 1), asp = 1,
-        xlab = expression(theta[1]), ylab = expression(theta[2]), main = paste("Muestra", s))
+        xlab = expression(theta[1]), ylab = expression(theta[2]), main = sub("^(.)", "\\U\\1", sample_labels[[s]], perl = TRUE))
       graphics::abline(a = 0, b = 1, lty = 2, col = "grey40")
       shown <- character()
       for (i in seq_len(nrow(dat))) {
@@ -290,7 +299,7 @@ run_vaping_figures <- function() {
         graphics::points(m$x1 / m$n1, m$x2 / m$n2, pch = 19, cex = .6, col = item_col[dat$group[i]])
         shown <- c(shown, dat$group[i])
       }
-      graphics::legend("bottomright", legend = shown, col = item_col[shown], lty = 1, bty = "n", cex = .75)
+      graphics::legend("bottomright", legend = item_label(shown), col = item_col[shown], lty = 1, lwd = 2, bty = "n", cex = .75)
       graphics::legend("topleft", legend = c("50% HPD", "95% HPD"), lty = c(1, 2), bty = "n", cex = .75)
     }
   }, width = 5 * length(samples), height = 5.2))
@@ -302,7 +311,7 @@ run_vaping_figures <- function() {
     panels <- list()
     for (s in names(samples)) for (i in seq_len(nrow(dat))) {
       m <- samples[[s]](dat[i, ]); if (is.null(m)) next
-      panels[[length(panels) + 1L]] <- list(title = paste0(dat$group[i], " (", s, ")"),
+      panels[[length(panels) + 1L]] <- list(title = paste0(item_label(dat$group[i]), " (", sample_labels[[s]], ")"),
         design = fbst_get_design(m$n1, m$n2, prior))
     }
     paths <- c(paths, fbst_app_plot_files("vaping_error_curves", function() {
@@ -321,7 +330,7 @@ run_vaping_figures <- function() {
         graphics::lines(cr$k, cr$beta, type = "s", col = "#D55E00")
         graphics::lines(cr$k, risk, type = "s", lty = 2)
         graphics::abline(v = pn$design$calibration$kstar, lty = 3)
-        graphics::legend("topright", legend = c("alpha", "beta", "alpha + beta"),
+        graphics::legend("top", legend = expression(alpha, beta, alpha + beta),
           col = c("#0072B2", "#D55E00", "black"), lty = c(1, 1, 2), bty = "n", cex = .7)
       }
     }, width = 3.6 * min(3, length(panels)), height = 3.4 * ceiling(length(panels) / 3)))
@@ -332,15 +341,16 @@ run_vaping_figures <- function() {
   #    contrast figure, which has no counterpart here).
   if (!is.null(res)) {
     ct <- res[res$D == 1, , drop = FALSE]
-    ct <- ct[order(ct$group, ct$muestra, ct$prior_key), , drop = FALSE]
+    ct <- ct[order(ct$group, ct$sample, ct$prior_key), , drop = FALSE]
     paths <- c(paths, fbst_app_plot_files("vaping_delta_intervals", function() {
-      y <- rev(seq_len(nrow(ct))); graphics::par(mar = c(4, 16, 2, 1))
+      y <- rev(seq_len(nrow(ct))); graphics::par(mar = c(4, 20, 2, 1))
       graphics::plot(ct$delta_mean, y, xlim = range(c(0, ct$delta_lo, ct$delta_hi)), yaxt = "n",
         ylab = "", xlab = expression(delta == theta[2] - theta[1]), pch = 19,
-        col = item_col[ct$group], main = "Posterior mean and 95% credible interval (D = 1)")
+        col = item_col[ct$group], main = "Posterior mean and 95% credible interval (D = 1)", cex.main = .9)
       graphics::segments(ct$delta_lo, y, ct$delta_hi, y, col = item_col[ct$group])
       graphics::abline(v = 0, lty = 2, col = "grey50")
-      graphics::axis(2, at = y, labels = paste0(ct$group, " / ", ct$muestra, " / ", ct$prior_key),
+      graphics::axis(2, at = y, labels = paste0(item_label(ct$group), " (", sample_labels[ct$sample], ", ",
+          ifelse(ct$prior_key %in% names(prior_labels), prior_labels[ct$prior_key], ct$prior_key), ")"),
         las = 1, cex.axis = .7)
     }, height = max(4, nrow(ct) * .32)))
     status[[length(status) + 1L]] <- data.frame(figure = "vaping_delta_intervals", status = "generated", reason = "")
