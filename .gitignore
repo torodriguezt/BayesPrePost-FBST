@@ -50,3 +50,6 @@ Thumbs.db
 
 # LaTeX build output
 build/
+
+# Article outputs and change reports (kept outside the repository)
+outputs_articulo/
