@@ -1,58 +1,29 @@
-# R / RStudio
+# Track only what is needed to reproduce the article's tables and figures:
+# the R scripts, the C++ core, the input data and the READMEs.
+# Results, figures, caches, manuscripts and local material stay out of Git.
+
+# Ignore everything, then re-include the code.
+*
+!*/
+!*.R
+!*.cpp
+!.gitignore
+!README.md
+!R/Data/*.csv
+
+# Local folders that may hold copies of the code or generated output.
+/archive/
+/results/
+/figures/
+/manuscripts/
+/submissions/
+/docs/
+/scripts/
+/logs/
+/output/
+/fbst_v2/
+/parallel_logs/
+/build/
+/outputs_articulo/
+/_respaldo/
 .Rproj.user/
-.Rhistory
-.RData
-.Ruserdata
-*.Rcheck/
-*.Rproj
-
-# Compiled C++ from Rcpp::sourceCpp
-*.o
-*.so
-*.dll
-*_sourceCpp/
-
-# LaTeX (the manuscript lives in Overleaf, outside this repository)
-*.tex
-*.aux
-*.log
-*.out
-*.toc
-*.bbl
-*.blg
-*.synctex.gz
-*.fls
-*.fdb_latexmk
-*.pdf
-
-# Generated tables and caches (fully reproducible via run_all.R)
-output/
-*.png
-*.csv
-*.rds
-*.RData
-
-# Figures are tracked
-!Figures/**/*.png
-!Figures/**/*.pdf
-
-# Local backup: manuscript, LaTeX template, outputs, caches and legacy material
-_respaldo/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Editors
-.vscode/
-.idea/
-*.swp
-
-# LaTeX build output
-build/
-
-# Article outputs and change reports (kept outside the repository)
-outputs_articulo/
-
-# Input data for the vaping stage (default path of R/application_vaping.R)
-!vaping_mccauley2023.csv
